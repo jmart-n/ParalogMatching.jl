@@ -2,9 +2,12 @@
 
 ########################## OPTIMIZATION AND MATCHING BLOCK ###################################
 
-const rmul! = VERSION < v"0.7-" ? scale! : Compat.LinearAlgebra.rmul!
-const chol! = VERSION < v"0.7-" ? cholfact! : cholesky!
-const rep = VERSION < v"0.7-" ? repmat : repeat
+# const rmul! = VERSION > v"0.7-" ? scale! : LinearAlgebra.rmul!
+# const chol! = VERSION > v"0.7-" ? cholfact! : cholesky!
+# const rep = VERSION > v"0.7-" ? repmat : repeat
+const rmul! = LinearAlgebra.rmul!
+const chol! = LinearAlgebra.cholesky!
+const rep = repeat
 
 function mpbmatch(D::DenseMatrix{T}, solver::MathProgBase.AbstractMathProgSolver) where {T<:AbstractFloat}
     N1, N2 = size(D)
@@ -30,13 +33,13 @@ function matching_matrix(N1::Int, N2::Int)
 
     t = 1
     for i = 1:N2, j = 1:N1
-        k = (i-1) * N1 + j
+        k = (i - 1) * N1 + j
         I[t] = i
         J[t] = k
         t += 1
     end
     for i = 1:N1, j = 1:N2
-        k = i + (j-1) * N1
+        k = i + (j - 1) * N1
         I[t] = i + N2
         J[t] = k
         t += 1
@@ -50,7 +53,7 @@ end
 # Gets both the lines of alignments matched for a given list of specs
 function get_edges(X1, X2, match, specs::Vector{Int})
     ind = findall([a in specs for a in X1.spec_id] .≠ 0)
-    filter!(x->match[x]!=0, ind)
+    filter!(x -> match[x] != 0, ind)
     return ind, match[ind]
 end
 
@@ -58,13 +61,13 @@ end
 # nspecs corresponds to the specs added at this step, defined by their spec_id
 # You have to pass the prior because it is in-place
 function unitFC!(X1, X2, match, nspecs, prior)
-    @extract X1 : N1=N Z1=Z N1=N q
-    @extract X2 : N2=N Z2=Z N2=N
-    @extract prior : Pij Pi M
+    @extract X1:N1 = N Z1 = Z N1 = N q
+    @extract X2:N2 = N Z2 = Z N2 = N
+    @extract prior:Pij Pi M
 
     N = N1 + N2
     s = q - 1
-    Ns  = N * s
+    Ns = N * s
 
     # First removing the species to be recomputed
     if !isempty(intersect(prior.specs, nspecs))
@@ -75,11 +78,11 @@ function unitFC!(X1, X2, match, nspecs, prior)
         edg1, edg2 = get_edges(X1, X2, prior_match, recomp_specs)
         len = length(edg1)
 
-        Z1a = Z1[edg1,:]
-        Z2a = Z2[edg2,:]
+        Z1a = Z1[edg1, :]
+        Z2a = Z2[edg2, :]
         Zt = hcat(Z1a, Z2a)'
 
-        ZZ = Vector{Int8}[vec(Zt[i,:]) for i = 1:N]
+        ZZ = Vector{Int8}[vec(Zt[i, :]) for i = 1:N]
 
         # first removing
         @inbounds begin
@@ -89,7 +92,7 @@ function unitFC!(X1, X2, match, nspecs, prior)
                 for k in 1:len
                     a = Zi[k]
                     a == q && continue
-                    Pi[i0 + a] -= 1.0
+                    Pi[i0+a] -= 1.0
                 end
                 i0 += s
             end
@@ -123,11 +126,11 @@ function unitFC!(X1, X2, match, nspecs, prior)
     edg1, edg2 = get_edges(X1, X2, match, nspecs)
     len = length(edg1)
 
-    Z1a = Z1[edg1,:]
-    Z2a = Z2[edg2,:]
+    Z1a = Z1[edg1, :]
+    Z2a = Z2[edg2, :]
     Zt = hcat(Z1a, Z2a)'
 
-    ZZ = Vector{Int8}[vec(Zt[i,:]) for i = 1:N]
+    ZZ = Vector{Int8}[vec(Zt[i, :]) for i = 1:N]
 
     @inbounds begin
         i0 = 0
@@ -136,7 +139,7 @@ function unitFC!(X1, X2, match, nspecs, prior)
             for k in 1:len
                 a = Zi[k]
                 a == q && continue
-                Pi[i0 + a] += 1.0
+                Pi[i0+a] += 1.0
             end
             i0 += s
         end
@@ -167,8 +170,8 @@ end
 
 # Computes the correlation matrix knowing the frequency matrix
 function full_COD!(prev::FastC, freq::FreqC)
-    @extract freq : Pij Pi specs M
-    @extract prev : Cij
+    @extract freq:Pij Pi specs M
+    @extract prev:Cij
 
     m = M[1] + M[2]
 
@@ -177,7 +180,7 @@ function full_COD!(prev::FastC, freq::FreqC)
     #Cij[:] = 1.0 / m * Pij[:] - 1.0 / m^2 * (Pi * Pi')[:]
     N = length(Pi)
     copyto!(Cij, Pij)
-    rmul!(Cij, 1/m)
+    rmul!(Cij, 1 / m)
     @inbounds for j = 1:N
         Pj = Pi[j]
         @simd for i = 1:N
@@ -198,7 +201,7 @@ function expand_binary(Z, s)
     a, b = size(Z)
     expZ = zeros(a, b * s)
     for i in 1:b, j in 1:a
-        Z[j,i] != s + 1 ? expZ[j,(i-1)*s+Z[j,i]] += 1 : continue
+        Z[j, i] != s + 1 ? expZ[j, (i-1)*s+Z[j, i]] += 1 : continue
     end
     return expZ
 end
@@ -208,10 +211,10 @@ end
 # This function takes alignments, priors matrices and ONE spec, and computes the matching following various strategies
 # The helpers for the strategies are below
 function give_correction(X1, X2, freq::FreqC, invC::Matrix{Float64}, spec::Int, strategy::AbstractString,
-                         solver::MathProgBase.SolverInterface.AbstractMathProgSolver)
-    @extract X1 : spec1=spec_id Z1=Z N1=N s=q-1
-    @extract X2 : spec2=spec_id Z2=Z N2=N
-    @extract freq : M Pi
+    solver::MathProgBase.SolverInterface.AbstractMathProgSolver)
+    @extract X1:spec1 = spec_id Z1 = Z N1 = N s = q - 1
+    @extract X2:spec2 = spec_id Z2 = Z N2 = N
+    @extract freq:M Pi
 
     r1 = 1:(s*N1)
     r2 = (s*N1+1):(s*(N1+N2))
@@ -228,18 +231,18 @@ function give_correction(X1, X2, freq::FreqC, invC::Matrix{Float64}, spec::Int, 
         ind2 = findall(spec2 .== spec)
 
         # takes the sequences of the "spec"
-        Zb1 = expand_binary(Z1[ind1,:], s)
-        Zb2 = expand_binary(Z2[ind2,:], s)
+        Zb1 = expand_binary(Z1[ind1, :], s)
+        Zb2 = expand_binary(Z2[ind2, :], s)
 
         m = M[1] + M[2]
 
         # extracts the mean of the prior (one could add the additional contribution brought by the "spec")
         # but it does not change the results and we consider non bijective case here
-        vmean1 = rep(Pi' / m, length(ind1))[:,r1]
-        vmean2 = rep(Pi' / m, length(ind2))[:,r2]
+        vmean1 = rep(Pi' / m, length(ind1))[:, r1]
+        vmean2 = rep(Pi' / m, length(ind2))[:, r2]
 
         # the cost function as the matching algorithm wants it
-        cost = (Zb1-vmean1) * invC[r1,r2] * (Zb2-vmean2)'
+        cost = (Zb1 - vmean1) * invC[r1, r2] * (Zb2 - vmean2)'
 
         if strategy == "covariation"
             # Compute the matching via linear programming
@@ -253,7 +256,7 @@ function give_correction(X1, X2, freq::FreqC, invC::Matrix{Float64}, spec::Int, 
             error("bug")
         end
 
-    # Genetic matching strategy by genetic distance
+        # Genetic matching strategy by genetic distance
     elseif strategy == "genetic"
         # computes the genetic distance between sequences and returns the matching
         cost = cost_from_annot(X1, X2, spec)
@@ -261,7 +264,7 @@ function give_correction(X1, X2, freq::FreqC, invC::Matrix{Float64}, spec::Int, 
 
         permres = filter_gen_dist(convert_perm_mat(rematch), cost)
 
-    # Random matching to test null hypothesis
+        # Random matching to test null hypothesis
     elseif strategy == "random"
         ind1 = findall(spec1 .== spec)
         ind2 = findall(spec2 .== spec)
@@ -283,8 +286,8 @@ end
 # ind2:matched rowd of the second alignment
 function convert_perm_mat(mat)
     len1, len2 = size(mat)
-    ind1 = findall([!isempty(findall(mat[i,:] .≠ 0)) for i in 1:len1] .≠ 0)
-    ind2 = [findfirst(x->x≠0, mat[i,:]) for i in ind1]
+    ind1 = findall([!isempty(findall(mat[i, :] .≠ 0)) for i in 1:len1] .≠ 0)
+    ind2 = [findfirst(x -> x ≠ 0, mat[i, :]) for i in ind1]
     return ind1, ind2
 end
 
@@ -293,16 +296,16 @@ end
 let Cdict = Dict{Int,Matrix{Float64}}()
     global inverse_with_pseudo!, clear_inverse_mem
     function inverse_with_pseudo!(prev::FastC, freq::FreqC, pc::Float64)
-        @extract freq : M Pi
-        Mfake = round(Int, ((M[1]+M[2])*pc - M[2]) / (1-pc))
+        @extract freq:M Pi
+        Mfake = round(Int, ((M[1] + M[2]) * pc - M[2]) / (1 - pc))
 
         L = length(Pi)
-        CC = Base.@get!(Cdict, L, Array{Float64}(undef, L, L))
-
+        CC = Base.get!(Cdict, L, Array{Float64}(undef, L, L))
+        # CC = Base.@get!()
         add_pseudocount!(freq, Mfake)
         full_COD!(prev, freq)
         copyto!(CC, prev.Cij)
-        inter = Compat.LinearAlgebra.inv!(chol!(CC))
+        inter = LinearAlgebra.inv!(chol!(CC))
         return inter
     end
     clear_inverse_mem() = empty!(Cdict)
@@ -313,7 +316,7 @@ end
 function add_pseudocount!(freq::FreqC, Mfake::Int)
     Mfake != 0 || return
 
-    @extract freq : Pi Pij M specs q
+    @extract freq:Pi Pij M specs q
 
     s = q - 1
     L = length(Pi)
@@ -354,14 +357,14 @@ function annot2num(annotb::AbstractString)
     end
     annot = annotb[end-5:end]
     bs = [36, 10, 36, 36, 36, 10]
-    dgts = [ parse(Int, string(annot[i]), bs[i]) for i = 1:6 ]
+    dgts = [parse(Int, string(annot[i]), bs[i]) for i = 1:6]
     mbs = cumprod(reverse([10, 36, 36, 36, 10, 1]))
     return dot(reverse(dgts), mbs)
 end
 
 function cost_from_annot(X1, X2, spec)
-    @extract X1 : spec1=spec_id Z1=Z N1=N
-    @extract X2 : spec2=spec_id Z2=Z N2=N
+    @extract X1:spec1 = spec_id Z1 = Z N1 = N
+    @extract X2:spec2 = spec_id Z2 = Z N2 = N
 
     ind1 = findall(spec1 .== spec)
     ind2 = findall(spec2 .== spec)
@@ -375,8 +378,8 @@ function filter_gen_dist(match, cost)
 
     #println(collect(zip(match...)))
 
-    for (i,j) in zip(match...)
-        abs(cost[i,j]) < 100 || continue
+    for (i, j) in zip(match...)
+        abs(cost[i, j]) < 100 || continue
         push!(res1, i)
         push!(res2, j)
     end

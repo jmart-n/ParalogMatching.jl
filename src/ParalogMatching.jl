@@ -3,7 +3,7 @@
 module ParalogMatching
 
 using Compat
-using Compat.LinearAlgebra, Compat.Random, Compat.SparseArrays
+using LinearAlgebra, Random, SparseArrays
 using FastaIO, ExtractMacro
 using Distributions
 using MathProgBase
@@ -11,7 +11,7 @@ using GLPKMathProgInterface
 const default_lpsolver = GLPKSolverLP()
 
 export read_fasta_alignment, prepare_alignments, run_matching,
-       write_fasta_match, paralog_matching
+    write_fasta_match, paralog_matching
 
 # Including the types used for the Matching
 include("types.jl")
