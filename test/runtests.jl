@@ -4,9 +4,9 @@ using ParalogMatching
 using FastaIO
 using Test
 
-const testfile1 = "test/X1.fasta.gz"
-const testfile2 = "test/X2.fasta.gz"
-const outfile_ok = "test/Xmatched.fasta.gz"
+const testfile1 = "X1.fasta.gz"
+const testfile2 = "X2.fasta.gz"
+const outfile_ok = "Xmatched.fasta.gz"
 
 function test()
     outfile_tst = tempname()
